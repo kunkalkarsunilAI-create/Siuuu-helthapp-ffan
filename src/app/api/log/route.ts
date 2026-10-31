@@ -78,13 +78,26 @@ Athlete's new input: """${text || "(photo only)"}"""`;
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM }] },
         contents: [{ role: "user", parts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 1500 },
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.3,
+          maxOutputTokens: 4096,
+          // 2.5 models "think" by default and that eats the output budget → cut-off JSON.
+          ...(MODEL.includes("2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+        },
       }),
     });
     const data = await r.json();
     if (!r.ok) return Response.json({ error: "gemini_error", detail: data?.error?.message }, { status: 502 });
-    const out = (data?.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || "").join("");
-    const parsed = JSON.parse(out.replace(/^```json|```$/g, "").trim());
+    const out: string = (data?.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || "").join("");
+    let parsed: any;
+    try {
+      parsed = JSON.parse(out.replace(/^```json|```$/g, "").trim());
+    } catch {
+      const a = out.indexOf("{"), b = out.lastIndexOf("}");
+      try { parsed = JSON.parse(out.slice(a, b + 1)); }
+      catch { return Response.json({ error: "bad_json", detail: `finish=${data?.candidates?.[0]?.finishReason} ${out.slice(0, 160)}` }, { status: 502 }); }
+    }
     return Response.json({ ...sanitize(parsed), model: MODEL });
   } catch (e) {
     return Response.json({ error: "server_error", detail: String(e).slice(0, 200) }, { status: 500 });
