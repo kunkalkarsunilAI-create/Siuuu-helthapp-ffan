@@ -4,7 +4,25 @@
 
 export const runtime = "nodejs";
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+// Each model has its own free-tier daily quota; if one is exhausted (429) or missing (404), try the next.
+const MODELS = Array.from(new Set([MODEL, "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash"]));
+
+async function callGemini(key: string, body: (model: string) => object) {
+  let last: { status: number; data: any; model: string } = { status: 500, data: {}, model: MODEL };
+  for (const model of MODELS) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key.trim() },
+      body: JSON.stringify(body(model)),
+    });
+    const data = await r.json().catch(() => ({}));
+    last = { status: r.status, data, model };
+    if (r.ok) return { ok: true as const, ...last };
+    if (r.status !== 429 && r.status !== 404 && r.status !== 503) break;
+  }
+  return { ok: false as const, ...last };
+}
 
 const SYSTEM = `You are the logging assistant inside BulkBuddy, an app for a competitive field-football player on a strength-training and weight-gain (bulking) protocol, 66 kg -> 75 kg. Daily example targets: protein 145 g, carbs 400 g, fat 85 g, 3100 kcal, water 4 L.
 
@@ -72,23 +90,19 @@ Athlete's new input: """${text || "(photo only)"}"""`;
   if (image?.data) parts.push({ inline_data: { mime_type: image.mime || "image/jpeg", data: image.data } });
 
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key.trim() },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: "user", parts }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.3,
-          maxOutputTokens: 4096,
-          // 2.5 models "think" by default and that eats the output budget → cut-off JSON.
-          ...(MODEL.includes("2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-        },
-      }),
-    });
-    const data = await r.json();
-    if (!r.ok) return Response.json({ error: "gemini_error", detail: data?.error?.message }, { status: 502 });
+    const g = await callGemini(key, (model) => ({
+      system_instruction: { parts: [{ text: SYSTEM }] },
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.3,
+        maxOutputTokens: 4096,
+        // 2.5 models "think" by default and that eats the output budget → cut-off JSON.
+        ...(model.includes("2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      },
+    }));
+    const data = g.data;
+    if (!g.ok) return Response.json({ error: "gemini_error", detail: `${g.model}: ${data?.error?.message || g.status}` }, { status: 502 });
     const out: string = (data?.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || "").join("");
     let parsed: any;
     try {
@@ -98,7 +112,7 @@ Athlete's new input: """${text || "(photo only)"}"""`;
       try { parsed = JSON.parse(out.slice(a, b + 1)); }
       catch { return Response.json({ error: "bad_json", detail: `finish=${data?.candidates?.[0]?.finishReason} ${out.slice(0, 160)}` }, { status: 502 }); }
     }
-    return Response.json({ ...sanitize(parsed), model: MODEL });
+    return Response.json({ ...sanitize(parsed), model: g.model });
   } catch (e) {
     return Response.json({ error: "server_error", detail: String(e).slice(0, 200) }, { status: 500 });
   }
@@ -110,15 +124,13 @@ export async function GET() {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return Response.json({ ok: false, problem: "GEMINI_API_KEY is not set in Vercel → Settings → Environment Variables (then Redeploy)." });
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key.trim() },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply with the word OK." }] }] }),
-    });
-    const d = await r.json();
-    if (!r.ok) return Response.json({ ok: false, model: MODEL, status: r.status, problem: d?.error?.message || "Gemini error" });
-    return Response.json({ ok: true, model: MODEL, reply: d?.candidates?.[0]?.content?.parts?.[0]?.text ?? "" });
+    const g = await callGemini(key, (model) => ({
+      contents: [{ role: "user", parts: [{ text: "Reply with the word OK." }] }],
+      ...(model.includes("2.5") ? { generationConfig: { thinkingConfig: { thinkingBudget: 0 } } } : {}),
+    }));
+    if (!g.ok) return Response.json({ ok: false, model: g.model, status: g.status, problem: g.data?.error?.message || "Gemini error" });
+    return Response.json({ ok: true, model: g.model, reply: g.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "" });
   } catch (e) {
-    return Response.json({ ok: false, model: MODEL, problem: String(e).slice(0, 200) });
+    return Response.json({ ok: false, problem: String(e).slice(0, 200) });
   }
 }

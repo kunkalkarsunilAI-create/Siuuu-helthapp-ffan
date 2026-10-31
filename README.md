@@ -29,7 +29,7 @@ npm run dev   # http://localhost:3000
 
 ## Deploy (free)
 1. Push to a public GitHub repo → vercel.com → *Add New Project* → import → Deploy.
-2. *Settings → Environment Variables*: `GEMINI_API_KEY` = your key from aistudio.google.com (optional `GEMINI_MODEL`, default `gemini-2.5-flash`). Redeploy.
+2. *Settings → Environment Variables*: `GEMINI_API_KEY` = your key from aistudio.google.com (optional `GEMINI_MODEL`, default `gemini-2.5-flash-lite`, with automatic fallback to other models if the free quota runs out). Redeploy.
 3. Keep the key on the free tier or set a low budget cap. **Never commit the key** (`.env*` is git-ignored).
 
 ## Structure
