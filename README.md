@@ -1,6 +1,6 @@
 # BulkBuddy
 
-**Live app:** https://YOUR-PROJECT.vercel.app  ← replace after deploying
+**Live app:** https://siuuu-helthapp-ffan.vercel.app
 **Report:** [REPORT.md](REPORT.md) · **Name:** [Your Name] · **Roll No:** [Roll No] · MAI-594 Introduction to Vibe Coding
 
 BulkBuddy is a dark-themed, mobile-first dashboard for a competitive field-football player on a strength and weight-gain protocol (66 → 75 kg). It opens from a link with no install and no sign-up. App state lives in React and the browser's localStorage, with no database. One small server route (`/api/log`) calls Google Gemini so the API key stays out of the browser and the repo. If the AI isn't available, the app switches to **demo mode** (rule-based) by itself.

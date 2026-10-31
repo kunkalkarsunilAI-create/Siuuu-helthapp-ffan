@@ -1,7 +1,7 @@
 # BulkBuddy — Project Report
 
 **Name:** [Your Name] · **Roll No:** [Roll No] · MAI-594 Introduction to Vibe Coding · PGDM (AI²) · Due 31 Oct 2026, 11:59 pm IST
-**Live app:** https://YOUR-PROJECT.vercel.app · **AI test bench:** https://YOUR-PROJECT.vercel.app/test
+**Live app:** https://siuuu-helthapp-ffan.vercel.app · **AI test bench:** https://siuuu-helthapp-ffan.vercel.app/test
 
 > **Before submitting, delete this box.** ✍️ = needs YOUR real evidence (reviews, interviews, user test, class notes). Don't invent it; the declaration you sign says it's real. 📝 = drafted from how the app is built; rewrite in your own words and change anything you disagree with. Limit: 2,500 words, not counting tables, screenshots and references.
 
