@@ -25,6 +25,10 @@ export function summarize(events: ParsedEvent[]): string {
   return parts.length ? `Logged: ${parts.join(" · ")}` : "";
 }
 
+// Why the last live call fell back to demo mode (shown on screen to help debugging).
+export let lastAiError = "";
+export const getAiError = () => lastAiError;
+
 export async function analyzeLog(input: LogInput): Promise<ParseResult> {
   const local = parseLog(input.text); // also our independent red-flag check
   const localFlags = local.events.filter((e) => e.kind === "redflag");
@@ -42,7 +46,12 @@ export async function analyzeLog(input: LogInput): Promise<ParseResult> {
           time: new Date().toLocaleString("en-IN"),
         }),
       });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        lastAiError = `${r.status} ${err.error || ""} ${err.detail || ""}`.trim();
+      }
       if (r.ok) {
+        lastAiError = "";
         const d = await r.json();
         let events: ParsedEvent[] = d.events || [];
         // Merge in red flags the rules caught even if the model missed them.
@@ -60,8 +69,8 @@ export async function analyzeLog(input: LogInput): Promise<ParseResult> {
           summary: summarize(events) || (unknown ? d.ask_back || "I couldn't find anything to log there." : "Safety check"),
         };
       }
-    } catch {
-      /* fall through to demo mode */
+    } catch (e) {
+      lastAiError = "network: " + String(e).slice(0, 120);
     }
   }
   return { ...local, mode: "demo" };

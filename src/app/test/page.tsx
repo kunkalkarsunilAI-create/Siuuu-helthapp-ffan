@@ -4,7 +4,7 @@
 // (live AI with the safety layer, or demo-mode rules) and checks each against what the AI should do.
 
 import { useState } from "react";
-import { analyzeLog } from "@/lib/ai";
+import { analyzeLog, getAiError } from "@/lib/ai";
 import type { ParseResult } from "@/lib/parser";
 
 type Case = { input: string; expect: string; check: (r: ParseResult) => boolean };
@@ -53,7 +53,8 @@ export default function TestBench() {
       }
       setRows([...out, ...CASES.slice(i + 1).map((c) => ({ c }))]);
     }
-    setStatus(`Done: ${out.filter((x) => x.ok).length}/10 passed · ${new Date().toLocaleString("en-IN")}`);
+    const why = !forceDemo && getAiError() ? ` · ⚠️ AI not reached, fell back to demo: ${getAiError()}` : "";
+    setStatus(`Done: ${out.filter((x) => x.ok).length}/10 passed · ${new Date().toLocaleString("en-IN")}${why}`);
   }
 
   const did = (r?: ParseResult, err?: string) =>
