@@ -74,7 +74,7 @@ Athlete's new input: """${text || "(photo only)"}"""`;
   try {
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key.trim() },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM }] },
         contents: [{ role: "user", parts }],
@@ -88,5 +88,24 @@ Athlete's new input: """${text || "(photo only)"}"""`;
     return Response.json({ ...sanitize(parsed), model: MODEL });
   } catch (e) {
     return Response.json({ error: "server_error", detail: String(e).slice(0, 200) }, { status: 500 });
+  }
+}
+
+// Health check: open /api/log in a browser to see whether the AI is configured and reachable.
+// Never reveals the key itself.
+export async function GET() {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return Response.json({ ok: false, problem: "GEMINI_API_KEY is not set in Vercel → Settings → Environment Variables (then Redeploy)." });
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key.trim() },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply with the word OK." }] }] }),
+    });
+    const d = await r.json();
+    if (!r.ok) return Response.json({ ok: false, model: MODEL, status: r.status, problem: d?.error?.message || "Gemini error" });
+    return Response.json({ ok: true, model: MODEL, reply: d?.candidates?.[0]?.content?.parts?.[0]?.text ?? "" });
+  } catch (e) {
+    return Response.json({ ok: false, model: MODEL, problem: String(e).slice(0, 200) });
   }
 }
