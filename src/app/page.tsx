@@ -5,6 +5,7 @@ import { analyzeLog } from "@/lib/ai";
 import { clearCloud, loadToday, loadWeighIns, localDay, saveLog, saveWeighIn } from "@/lib/db";
 import type { ParsedEvent, ParseResult } from "@/lib/parser";
 import FanZone from "@/components/FanZone";
+import AuthBar from "@/components/AuthBar";
 import {
   AILog, CardioWarning, HydrationRing, MacroBars, ProteinNudge, RedFlag, WeightTracker,
   emptyDay, seedWeighIns, useHour, useLocalState, type DayLog, type WeighIn,
@@ -121,6 +122,7 @@ export default function Home() {
             </span>
           </p>
         </div>
+        <AuthBar />
         <nav className="flex rounded-xl border border-white/10 bg-zinc-900 p-1 text-sm">
           {([["train", "Training"], ["fan", "Fan Zone"]] as const).map(([id, name]) => (
             <button key={id} onClick={() => setTab(id)} className={`rounded-lg px-3 py-1.5 font-medium ${tab === id ? "bg-lime-400 text-zinc-950" : "text-zinc-300"}`}>

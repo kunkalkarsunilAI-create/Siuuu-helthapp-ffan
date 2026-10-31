@@ -51,3 +51,7 @@ Built with Next.js and Tailwind CSS (MIT). AI by Google Gemini API. Code generat
 ## Database (Supabase)
 Tables: `logs` (each log: input, AI/demo mode, parsed events JSON, summary, coach line) and `weigh_ins` (one row per device per day).
 RLS policies use the `x-device-id` request header (`public.request_device_id()`), so one browser can't read or write another's data. The publishable key in `src/lib/db.ts` is public by design. The secret Gemini key is never in the repo.
+
+## Optional login (Clerk, email code)
+The app opens as a **guest** with no sign-up, as the brief requires. **Sign in** (top right) goes to `/sign-in`. Clerk emails a one-time code, and once signed in, your Supabase data follows your account across devices. The account's data ID is derived on the server from `CLERK_SECRET_KEY`.
+Setup: create an app at clerk.com (Email → verification code), then add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in Vercel → Environment Variables and redeploy. Without these keys, login is simply hidden.
