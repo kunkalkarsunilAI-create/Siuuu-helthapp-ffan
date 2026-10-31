@@ -3,7 +3,7 @@
 **Live app:** https://siuuu-helthapp-ffan.vercel.app
 **Report:** [REPORT.md](REPORT.md) · **Name:** [Your Name] · **Roll No:** [Roll No] · MAI-594 Introduction to Vibe Coding
 
-BulkBuddy is a dark-themed, mobile-first dashboard for a competitive field-football player on a strength and weight-gain protocol (66 → 75 kg). It opens from a link with no install and no sign-up. App state lives in React and the browser's localStorage, with no database. One small server route (`/api/log`) calls Google Gemini so the API key stays out of the browser and the repo. If the AI isn't available, the app switches to **demo mode** (rule-based) by itself.
+BulkBuddy is a dark-themed, mobile-first dashboard for a competitive field-football player on a strength and weight-gain protocol (66 → 75 kg). It opens from a link with no install and no sign-up. App state lives in React and localStorage, and is also **synced to Supabase (Postgres)** without sign-up: each browser gets a random device ID, and Row Level Security only lets it read and write its own rows. One small server route (`/api/log`) calls Google Gemini so the API key stays out of the browser and the repo. If the AI isn't available, the app switches to **demo mode** (rule-based) by itself.
 
 > ⚕️ Not Medical Advice. Does not diagnose or prescribe. See a doctor for red-flag symptoms.
 
@@ -39,6 +39,7 @@ src/components/Training.tsx all training cards + localStorage hook
 src/components/FanZone.tsx  simulated scoreboard
 src/app/api/log/route.ts    server route → Gemini (key from env), validates output
 src/app/test/page.tsx       10-input AI test bench
+src/lib/db.ts               Supabase sync (REST + device-id header, RLS-protected)
 src/lib/ai.ts               live AI call + safety layer + demo fallback
 src/lib/parser.ts           demo-mode rule parser + red-flag rules + meal list
 src/lib/fixtures.ts         simulated leagues, matches, live tick
@@ -46,3 +47,7 @@ src/lib/fixtures.ts         simulated leagues, matches, live tick
 
 ## Credits
 Built with Next.js and Tailwind CSS (MIT). AI by Google Gemini API. Code generated with help from Claude (Anthropic) and reviewed by me. There are no third-party images; the icons are system emoji. Macro values are rounded approximations.
+
+## Database (Supabase)
+Tables: `logs` (each log: input, AI/demo mode, parsed events JSON, summary, coach line) and `weigh_ins` (one row per device per day).
+RLS policies use the `x-device-id` request header (`public.request_device_id()`), so one browser can't read or write another's data. The publishable key in `src/lib/db.ts` is public by design. The secret Gemini key is never in the repo.

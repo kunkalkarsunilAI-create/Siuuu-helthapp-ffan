@@ -102,7 +102,7 @@
 
 ## Q5. Build and user test (14) ✍️
 
-**Built with:** Next.js + Tailwind CSS on Vercel; Google Gemini (`gemini-2.5-flash-lite`, falling back to other Gemini models when the free daily quota runs out) through a server route with the key in Vercel env vars; rule-based demo mode as fallback. Built with Claude as the coding assistant (see disclosure).
+**Built with:** Next.js + Tailwind CSS on Vercel; Google Gemini (`gemini-2.5-flash-lite`, falling back to other Gemini models when the free daily quota runs out) through a server route with the key in Vercel env vars; rule-based demo mode as fallback. Logs and weigh-ins sync to a Supabase Postgres database without sign-up (random device ID + Row Level Security), so data survives a cleared browser; the app keeps working offline. Built with Claude as the coding assistant (see disclosure).
 
 **User test.** With [pseudonym, footballer/athlete] on [date], on their phone.
 - What they did: …

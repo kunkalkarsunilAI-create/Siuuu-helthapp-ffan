@@ -1,14 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { analyzeLog } from "@/lib/ai";
+import { clearCloud, loadToday, loadWeighIns, localDay, saveLog, saveWeighIn } from "@/lib/db";
+import type { ParsedEvent, ParseResult } from "@/lib/parser";
 import FanZone from "@/components/FanZone";
 import {
   AILog, CardioWarning, HydrationRing, MacroBars, ProteinNudge, RedFlag, WeightTracker,
   emptyDay, seedWeighIns, useHour, useLocalState, type DayLog, type WeighIn,
 } from "@/components/Training";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
+
+// Fold logged events into the day's totals (used for new logs and when restoring from the cloud).
+function applyEvents(d: DayLog, events: ParsedEvent[], feedItem?: DayLog["feed"][number]): DayLog {
+  const m = { ...d.macros };
+  let waterMl = d.waterMl;
+  const cardio = [...d.cardio];
+  for (const e of events) {
+    if (e.kind === "food") { m.protein += e.macros.protein; m.carbs += e.macros.carbs; m.fat += e.macros.fat; m.kcal += e.macros.kcal; }
+    if (e.kind === "water") waterMl += e.ml;
+    if (e.kind === "cardio") cardio.push({ label: e.label, minutes: e.minutes, kcal: e.kcal });
+  }
+  return { macros: m, waterMl, cardio, feed: feedItem ? [...d.feed, feedItem].slice(-30) : d.feed };
+}
+
+type Cloud = "off" | "syncing" | "saved" | "error";
 
 export default function Home() {
   const [tab, setTab] = useState<"train" | "fan">("train");
@@ -18,17 +35,59 @@ export default function Home() {
   const [flags, setFlags] = useState<string[]>([]);
   const [mode, setMode] = useState<"live" | "demo" | null>(null);
   const [forceDemo, setForceDemo] = useState(false);
+  const [cloud, setCloud] = useState<Cloud>("off");
   const hour = useHour(hourOverride);
 
   // New day → fresh log.
   const day = stored.date === today() ? stored.log : emptyDay();
   const setDay = (fn: (d: DayLog) => DayLog) => setStored((s) => ({ date: today(), log: fn(s.date === today() ? s.log : emptyDay()) }));
 
+  // Cloud save wrapper: never blocks the UI; shows status in the header.
+  function sync(p: Promise<unknown>) {
+    setCloud("syncing");
+    p.then(() => setCloud("saved")).catch((e) => { console.warn(e); setCloud("error"); });
+  }
+
+  // On open: restore today's log and weigh-ins from Supabase (e.g. after clearing the browser).
+  useEffect(() => {
+    let alive = true;
+    setCloud("syncing");
+    Promise.all([loadToday(), loadWeighIns()])
+      .then(([logs, wis]) => {
+        if (!alive) return;
+        if (logs.length) {
+          let d = emptyDay();
+          for (const l of logs) {
+            const result: ParseResult = { events: l.events || [], summary: l.summary || "", unknown: !(l.events || []).length, mode: l.mode === "live" ? "live" : "demo", coach: l.coach || "" };
+            d = applyEvents(d, l.events || [], l.mode === "button" ? undefined : { at: l.created_at, text: l.input || "", result });
+          }
+          setStored({ date: today(), log: d });
+        }
+        if (wis.length) {
+          setWeighIns((w) => {
+            const cloudDays = new Set(wis.map((x) => x.day));
+            return [...w.filter((x) => !cloudDays.has(x.date)), ...wis.map((x) => ({ date: x.day, kg: x.kg }))].sort((a, b) => a.date.localeCompare(b.date));
+          });
+        }
+        setCloud("saved");
+      })
+      .catch((e) => { console.warn(e); if (alive) setCloud("error"); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function addWeight(kg: number) {
     setWeighIns((w) => {
       const rest = w.filter((x) => x.date !== today());
       return [...rest, { date: today(), kg }];
     });
+    sync(saveWeighIn(today(), kg));
+  }
+
+  function addWater(ml: number) {
+    const events: ParsedEvent[] = [{ kind: "water", ml }];
+    setDay((d) => applyEvents(d, events));
+    sync(saveLog({ input: `+${ml} ml button`, mode: "button", events }));
   }
 
   async function handleLog(text: string, image?: { mime: string; data: string } | null) {
@@ -43,17 +102,8 @@ export default function Home() {
     const red = result.events.flatMap((e) => (e.kind === "redflag" ? [e.reason] : []));
     if (red.length) setFlags(red);
     for (const e of result.events) if (e.kind === "weight") addWeight(e.kg);
-    setDay((d) => {
-      const m = { ...d.macros };
-      let waterMl = d.waterMl;
-      const cardio = [...d.cardio];
-      for (const e of result.events) {
-        if (e.kind === "food") { m.protein += e.macros.protein; m.carbs += e.macros.carbs; m.fat += e.macros.fat; m.kcal += e.macros.kcal; }
-        if (e.kind === "water") waterMl += e.ml;
-        if (e.kind === "cardio") cardio.push({ label: e.label, minutes: e.minutes, kcal: e.kcal });
-      }
-      return { macros: m, waterMl, cardio, feed: [...d.feed, { at: new Date().toISOString(), text, result }].slice(-30) };
-    });
+    setDay((d) => applyEvents(d, result.events, { at: new Date().toISOString(), text: text || (image ? "📷 photo" : ""), result }));
+    sync(saveLog({ input: text || (image ? "[meal photo]" : ""), mode: result.mode ?? "demo", events: result.events, summary: result.summary, coach: result.coach }));
   }
 
   const cardioKcal = day.cardio.reduce((s, c) => s + c.kcal, 0);
@@ -64,7 +114,12 @@ export default function Home() {
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-lime-400 text-lg font-black text-zinc-950">B</div>
         <div className="flex-1">
           <h1 className="text-lg font-bold leading-tight">BulkBuddy</h1>
-          <p className="text-xs text-zinc-400">Mass-gain dashboard for footballers</p>
+          <p className="text-xs text-zinc-400">
+            Mass-gain dashboard for footballers ·{" "}
+            <span className={cloud === "error" ? "text-amber-400" : cloud === "saved" ? "text-lime-400" : "text-zinc-500"}>
+              {cloud === "saved" ? "☁️ saved to cloud" : cloud === "syncing" ? "☁️ syncing…" : cloud === "error" ? "☁️ offline (saved on device)" : "☁️"}
+            </span>
+          </p>
         </div>
         <nav className="flex rounded-xl border border-white/10 bg-zinc-900 p-1 text-sm">
           {([["train", "Training"], ["fan", "Fan Zone"]] as const).map(([id, name]) => (
@@ -84,7 +139,7 @@ export default function Home() {
           <div className="grid gap-4 md:grid-cols-2">
             <WeightTracker weighIns={weighIns} onAdd={addWeight} />
             <div className="space-y-4">
-              <HydrationRing ml={day.waterMl} onAdd={(ml) => setDay((d) => ({ ...d, waterMl: d.waterMl + ml }))} />
+              <HydrationRing ml={day.waterMl} onAdd={addWater} />
               <MacroBars macros={day.macros} extraKcal={cardioKcal} />
             </div>
           </div>
@@ -101,7 +156,7 @@ export default function Home() {
             <label className="flex items-center gap-1"><input type="checkbox" checked={forceDemo} onChange={(e) => setForceDemo(e.target.checked)} /> demo mode</label>
             <a href="/test" className="rounded-full border border-white/10 px-2.5 py-1">AI test bench</a>
             <button
-              onClick={() => { if (confirm("Reset today's log and weigh-ins to the sample data?")) { setStored({ date: today(), log: emptyDay() }); setWeighIns(seedWeighIns()); setFlags([]); } }}
+              onClick={() => { if (confirm("Reset today's log and weigh-ins to the sample data?")) { setStored({ date: today(), log: emptyDay() }); setWeighIns(seedWeighIns()); setFlags([]); sync(clearCloud()); } }}
               className="ml-auto rounded-full border border-white/10 px-2.5 py-1"
             >Reset</button>
           </div>
