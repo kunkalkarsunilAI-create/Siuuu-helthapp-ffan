@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { analyzeLog } from "@/lib/ai";
+import FanZone from "@/components/FanZone";
 import {
   AILog, CardioWarning, HydrationRing, MacroBars, ProteinNudge, RedFlag, WeightTracker,
   emptyDay, seedWeighIns, useHour, useLocalState, type DayLog, type WeighIn,
@@ -106,6 +107,7 @@ export default function Home() {
           </div>
         </main>
       ) : (
+        <main><FanZone /></main>
       )}
 
       <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-zinc-950/90 px-4 py-2.5 text-center text-[11px] text-zinc-300 backdrop-blur">
